@@ -1,0 +1,260 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(janitor)
+library(lubridate)
+library(tis)
+options(digits=3)
+options(scipen=999)
+'%notin%' <- Negate('%in%')
+
+#does a standard group_by and count() with percentage
+grouper <- function(input_df, group_by_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = n()) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+}
+
+#group/counts every column in input dataframe
+group_count <- function(input_df, group_column_name='n()', state_filter=NA, start_col = 1){
+  column_names <- colnames(input_df)
+  if(!is.na(state_filter)){
+    input_df <- input_df %>%
+      filter(state == state_filter)
+  }
+  for (column in column_names[start_col:length(column_names)]){
+    output <- grouper(input_df, column, group_column_name)
+    print(output)
+  }
+}
+
+#lowers case of every character column in a dataframe
+lower_df <- function(input_df){
+  names <- colnames(input_df)
+  output_df <- input_df
+  names <- colnames(output_df)
+  for (name in names){
+    if (is.character(output_df[[name]])){
+      output_df[[name]] <- tolower(output_df[[name]])
+      #print('yes')
+    } else {
+      output_df[[name]] <- output_df[[name]]
+      #print('no')
+    }
+  }
+  return(output_df)
+}
+
+grouper_sum <- function(input_df, group_by_column, sum_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = sum(.data[[sum_column]])) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+  
+}
+
+```
+
+```{r}
+
+#importing and cleaning four corners
+crimes <- read_csv('../city-crime-data/data/Part_1_Crime_Data_.csv') %>%
+  #cleaning column names
+  clean_names() %>%
+  #lowering text in df
+  lower_df() %>%
+  #converting to lubridate
+  mutate(crime_date_time = ymd_hms(crime_date_time))  %>%
+  #making year month hour columns
+  mutate(year = year(as.Date(crime_date_time)),
+         month = month(as.Date(crime_date_time)),
+         hour = hour(as.Date(crime_date_time)),
+         date = as_date(crime_date_time, 'day')) %>%
+  #removing lat/long because there are multiples and ethnicity because it is unreliable and uneccesary for weekend count analysis
+  select(-x, -y, -row_id, -latitude, -longitude, -ethnicity) %>%#, -shape) %>%
+  #filtering for year
+  filter(year >= 2011) %>%
+  #splitting geo location
+  separate(geo_location, c("latitude", "longitude"), ',') %>%
+  #removing parenthesis
+  mutate(latitude = gsub('\\(', '', latitude),
+         longitude = gsub('\\)', '', longitude)) %>%
+  filter(!is.na(district)) %>%
+  #mutating database of victims to database of distinct crimes
+  group_by(crime_date_time, crime_code, location, description, district, neighborhood, year, date) %>%
+  summarise(victims = n())
+
+
+```
+
+#PROPOSED DISTRICTS
+
+```{r}
+#import crosswalk made in QGIS
+proposed_bpd_districts <- read_csv("data/output/crosswalk/proposed-bpd-districts-crosswalk.csv") %>%
+  select(name, layer) %>%
+  separate(layer, c("proposed_district", "junk"), "-") %>%
+  select(-junk) %>%
+  rename(neighborhood = name) %>%
+  lower_df()
+
+#import 2020 census data for each neighborhood
+census <- read_csv("../census-2020/output/prop_change_by_neighborhood.csv") %>%
+  select(neighborhood, x2020_pop, x2020_pop_hisp, x2020_pop_white_non_hisp, x2020_pop_black_non_hisp) %>% 
+  lower_df()
+
+#join to crimes
+crimes <- crimes %>%
+  left_join(proposed_bpd_districts) 
+
+census <- census %>%
+  left_join(proposed_bpd_districts) %>%
+  relocate(neighborhood, proposed_district)
+
+proposed_districts <- census %>%
+  group_by(proposed_district) %>%
+  summarise(x2020_pop = sum(x2020_pop),
+            x2020_pop_hisp = sum(x2020_pop_hisp),
+            x2020_pop_white_non_hisp = sum(x2020_pop_white_non_hisp),
+            x2020_pop_black_non_hisp = sum(x2020_pop_black_non_hisp)) %>%
+  #k;j
+  mutate(majority = case_when(
+    x2020_pop_black_non_hisp/x2020_pop >= .5 ~ "black",
+    x2020_pop_white_non_hisp/x2020_pop >= .5 ~ "white",
+    x2020_pop_hisp/x2020_pop >= .5 ~ "hispanic",
+    TRUE  ~ "minority"
+  )) %>%
+  mutate(largest_pop = case_when(
+    x2020_pop_hisp > x2020_pop_white_non_hisp & x2020_pop_hisp > x2020_pop_black_non_hisp ~ "hispanic",
+    x2020_pop_white_non_hisp > x2020_pop_hisp & x2020_pop_white_non_hisp > x2020_pop_black_non_hisp ~ "white",
+    x2020_pop_black_non_hisp > x2020_pop_hisp & x2020_pop_black_non_hisp > x2020_pop_white_non_hisp ~ "black",
+    TRUE ~ "error"
+  )) %>%
+  mutate(white_pop_rank = dense_rank(-x2020_pop_white_non_hisp),
+         black_pop_rank = dense_rank(-x2020_pop_black_non_hisp),
+         hisp_pop_rank = dense_rank(-x2020_pop_hisp))
+
+rm(proposed_bpd_districts)
+```
+
+###
+
+```{r}
+
+#sub function that does all the work
+
+sub_calc_district <- function(input_df, input_district){
+  
+  output_df <- input_df %>%
+    filter(proposed_district == input_district) %>%
+    group_by(description) %>%
+    summarise(incidents = n()) %>%
+    mutate(proposed_district = input_district) %>%
+    pivot_wider(values_from = incidents, names_from = description) %>%
+    clean_names() %>%
+    left_join(proposed_districts) %>%
+    mutate(agg_assault_per_1k = agg_assault/(x2020_pop/1000),
+           arson_per_1k  = arson/(x2020_pop/1000),
+           auto_theft_per_1k  = auto_theft/(x2020_pop/1000),
+           burglary_per_1k  = burglary/(x2020_pop/1000),
+           common_assault_per_1k  = common_assault/(x2020_pop/1000),
+           homicide_per_1k  = homicide/(x2020_pop/1000),
+           larceny_per_1k  = larceny/(x2020_pop/1000),
+           larceny_from_auto_per_1k  = larceny_from_auto/(x2020_pop/1000),
+           rape_per_1k  = rape/(x2020_pop/1000),
+           robbery_carjacking_per_1k  = robbery_carjacking/(x2020_pop/1000),
+           robbery_commercial_per_1k  = robbery_commercial/(x2020_pop/1000),
+           robbery_residence_per_1k  = robbery_residence/(x2020_pop/1000),
+           robbery_street_per_1k  = robbery_street/(x2020_pop/1000),
+           shooting_per_1k  = shooting/(x2020_pop/1000))
+    
+    return(output_df)
+}
+
+# Entrypoint with year filter
+
+calc_district <- function(input_df, input_district, input_year="None"){
+  if (input_year != "None"){
+    input_df <- input_df %>%
+      filter(year == input_year)}
+  output_df <- input_df %>%
+    sub_calc_district(input_district)
+}
+
+
+calc_districts <- function(input_df){
+  
+  districts <- unique(proposed_districts$proposed_district)
+
+  for (district_nume in 1:length(districts)){
+    
+    district <- districts[district_nume]
+    
+    temp <- calc_district(input_df, district)
+    
+    if (district_nume == 1) {
+      output <- temp
+    } else {
+      output <- output %>%
+        bind_rows(temp)
+    }
+    
+  }
+  
+  output <- output %>%
+    arrange(district)
+  
+  return(output)
+  
+}
+
+
+
+proposed_pandemic <- calc_districts(crimes %>%
+                             filter(year >= 2020)) %>%
+  mutate(year = "since 2020") %>%
+  rename(district = proposed_district)
+
+proposed_from_2015 <- calc_districts(crimes %>%
+                              filter(year < 2020 & year >= 2015)) %>%
+  mutate(year = "from 2015 to 2020")  %>%
+  rename(district = proposed_district)
+
+proposed_district <- proposed_pandemic %>%
+  bind_rows(proposed_from_2015)
+
+write_csv(proposed_pandemic, "data/output/proposed-district-pandemic.csv")
+write_csv(proposed_from_2015, "data/output/proposed-district-from-2015.csv")
+write_csv(proposed_district, "data/output/proposed-district-profiles.csv")
+
+```
+
+
+
+
+```{r}
+
+crimes %>%
+  filter(!is.na(district)) %>%
+  group_by(district, description) %>%
+  summarise(incidents = n()) %>%
+  pivot_wider(values_from = incidents, names_from = description) %>%
+  clean_names()
+
+
+```

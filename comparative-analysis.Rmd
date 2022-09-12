@@ -1,0 +1,229 @@
+---
+title: "combined"
+output: html_document
+date: "2022-09-02"
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(janitor)
+library(lubridate)
+library(tis)
+options(digits=3)
+options(scipen=999)
+'%notin%' <- Negate('%in%')
+
+#does a standard group_by and count() with percentage
+grouper <- function(input_df, group_by_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = n()) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+}
+
+#group/counts every column in input dataframe
+group_count <- function(input_df, group_column_name='n()', state_filter=NA, start_col = 1){
+  column_names <- colnames(input_df)
+  if(!is.na(state_filter)){
+    input_df <- input_df %>%
+      filter(state == state_filter)
+  }
+  for (column in column_names[start_col:length(column_names)]){
+    output <- grouper(input_df, column, group_column_name)
+    print(output)
+  }
+}
+
+#lowers case of every character column in a dataframe
+lower_df <- function(input_df){
+  names <- colnames(input_df)
+  output_df <- input_df
+  names <- colnames(output_df)
+  for (name in names){
+    if (is.character(output_df[[name]])){
+      output_df[[name]] <- tolower(output_df[[name]])
+      #print('yes')
+    } else {
+      output_df[[name]] <- output_df[[name]]
+      #print('no')
+    }
+  }
+  return(output_df)
+}
+
+grouper_sum <- function(input_df, group_by_column, sum_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = sum(.data[[sum_column]])) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+  
+}
+
+```
+
+#IMPORT
+
+```{r}
+
+current_from_2015 <- read_csv("data/output/current-district-from-2015.csv")
+current_pandemic <- read_csv("data/output/current-district-pandemic.csv")
+proposed_pandemic <- read_csv("data/output/proposed-district-pandemic.csv")
+proposed_from_2015 <- read_csv("data/output/proposed-district-from-2015.csv")
+
+```
+
+#FUNCTION
+
+```{r setup, include=FALSE}
+
+#this function calculates share of total crimes
+get_crime_share <- function(input_df){
+  
+  output_df <- input_df %>%
+      select(district, agg_assault, arson, auto_theft, burglary, common_assault, homicide, larceny, larceny_from_auto, rape, robbery_carjacking, robbery_commercial, robbery_residence, robbery_street, shooting) %>%
+    #adding totals column
+    adorn_totals("col") %>%
+    clean_names() %>%
+    #reverting to DF
+    as.data.frame() %>%
+    #calculating share
+    mutate(share_agg_assault = (agg_assault/sum(agg_assault))*100,
+         share_arson = (arson/sum(arson))*100,
+         share_auto_theft = (auto_theft/sum(auto_theft))*100,
+         share_burglary = (burglary/sum(burglary))*100,
+         share_common_assault = (common_assault/sum(common_assault))*100,
+         share_homicide = (homicide/sum(homicide))*100,
+         share_larceny = (larceny/sum(larceny))*100,
+         share_larceny_from_auto = (larceny_from_auto/sum(larceny_from_auto))*100,
+         share_rape = (rape/sum(rape))*100,
+         share_robbery_carjacking = (robbery_carjacking/sum(robbery_carjacking))*100,
+         share_robbery_commercial = (robbery_commercial/sum(robbery_commercial))*100,
+         share_robbery_residence = (robbery_residence/sum(robbery_residence))*100,
+         share_robbery_street = (robbery_street/sum(robbery_street))*100,
+         share_shooting = (shooting/sum(shooting))*100,
+         share_total = (total/sum(total))*100
+         )  %>%
+    #relocationg mutations to front
+       relocate(district, share_total, share_agg_assault, share_arson, share_auto_theft, share_burglary, share_common_assault, share_homicide, share_larceny, share_larceny_from_auto, share_rape, share_robbery_carjacking, share_robbery_commercial, share_robbery_residence, share_robbery_street, share_shooting)
+  
+    return(output_df)
+  
+}
+
+```
+
+#PANDEMIC ANALYSIS
+
+```{r}
+# calculating share by district
+share_proposed_pandemic <- get_crime_share(proposed_pandemic) %>%
+  select(district, share_total, share_agg_assault, share_homicide, share_shooting, share_arson, share_burglary, share_common_assault, share_larceny, share_larceny_from_auto, share_rape, share_robbery_carjacking, share_robbery_commercial, share_robbery_residence, share_robbery_street) %>%
+  #renaming to reflect proposed districts
+  rename(proposed_total = share_total,
+         proposed_agg_assault = share_agg_assault,
+         proposed_homicide = share_homicide,
+         proposed_shooting = share_shooting,
+         proposed_arson = share_arson,
+         proposed_burglary = share_burglary,
+         proposed_common_assault = share_common_assault,
+         proposed_larceny = share_larceny,
+         proposed_larceny_from_auto = share_larceny_from_auto,
+         proposed_rape = share_rape,
+         proposed_robbery_carjacking = share_robbery_carjacking,
+         proposed_robbery_commercial = share_robbery_commercial,
+         proposed_robbery_residence = share_robbery_residence,
+         proposed_robbery_street = share_robbery_street
+)
+
+
+share_current_pandemic <- get_crime_share(current_pandemic) %>%
+  select(district, share_total, share_agg_assault, share_homicide, share_shooting, share_arson, share_burglary, share_common_assault, share_larceny, share_larceny_from_auto, share_rape, share_robbery_carjacking, share_robbery_commercial, share_robbery_residence, share_robbery_street) %>%
+  #renaming to reflect currnet districts
+  rename(current_total = share_total,
+         current_agg_assault = share_agg_assault,
+         current_homicide = share_homicide,
+         current_shooting = share_shooting,
+         current_arson = share_arson,
+         current_burglary = share_burglary,
+         current_common_assault = share_common_assault,
+         current_larceny = share_larceny,
+         current_larceny_from_auto = share_larceny_from_auto,
+         current_rape = share_rape,
+         current_robbery_carjacking = share_robbery_carjacking,
+         current_robbery_commercial = share_robbery_commercial,
+         current_robbery_residence = share_robbery_residence,
+         current_robbery_street = share_robbery_street)
+
+#joining current and post pandemic together
+share_pandemic <- share_current_pandemic %>%
+  left_join(share_proposed_pandemic) %>%
+  relocate(district, current_total, proposed_total, current_agg_assault, proposed_agg_assault, current_homicide, proposed_homicide, current_shooting, proposed_shooting, current_arson, proposed_arson, current_burglary, proposed_burglary, current_common_assault, proposed_common_assault, current_larceny, proposed_larceny, current_larceny_from_auto, proposed_larceny_from_auto, current_rape, proposed_rape, current_robbery_carjacking, proposed_robbery_carjacking, current_robbery_commercial, proposed_robbery_commercial, current_robbery_residence, proposed_robbery_residence, current_robbery_street, proposed_robbery_street)
+
+share_pandemic
+
+write_csv(share_pandemic, "data/output/violent-crime-share-since-pandemic.csv")
+```
+
+#PRE-PANDEMIC ANALYSIS
+
+```{r}
+
+share_proposed_from_2015 <- get_crime_share(proposed_from_2015) %>%
+  select(district, share_total, share_agg_assault, share_homicide, share_shooting, share_arson, share_burglary, share_common_assault, share_larceny, share_larceny_from_auto, share_rape, share_robbery_carjacking, share_robbery_commercial, share_robbery_residence, share_robbery_street) %>%
+  #renaming to reflect proposed districts
+  rename(proposed_total = share_total,
+         proposed_agg_assault = share_agg_assault,
+         proposed_homicide = share_homicide,
+         proposed_shooting = share_shooting,
+         proposed_arson = share_arson,
+         proposed_burglary = share_burglary,
+         proposed_common_assault = share_common_assault,
+         proposed_larceny = share_larceny,
+         proposed_larceny_from_auto = share_larceny_from_auto,
+         proposed_rape = share_rape,
+         proposed_robbery_carjacking = share_robbery_carjacking,
+         proposed_robbery_commercial = share_robbery_commercial,
+         proposed_robbery_residence = share_robbery_residence,
+         proposed_robbery_street = share_robbery_street
+)
+
+
+share_current_from_2015 <- get_crime_share(current_from_2015) %>%
+  select(district, share_total, share_agg_assault, share_homicide, share_shooting, share_arson, share_burglary, share_common_assault, share_larceny, share_larceny_from_auto, share_rape, share_robbery_carjacking, share_robbery_commercial, share_robbery_residence, share_robbery_street) %>%
+  #renaming to reflect currnet districts
+  rename(current_total = share_total,
+         current_agg_assault = share_agg_assault,
+         current_homicide = share_homicide,
+         current_shooting = share_shooting,
+         current_arson = share_arson,
+         current_burglary = share_burglary,
+         current_common_assault = share_common_assault,
+         current_larceny = share_larceny,
+         current_larceny_from_auto = share_larceny_from_auto,
+         current_rape = share_rape,
+         current_robbery_carjacking = share_robbery_carjacking,
+         current_robbery_commercial = share_robbery_commercial,
+         current_robbery_residence = share_robbery_residence,
+         current_robbery_street = share_robbery_street)
+
+#joining current and post pandemic together
+share_from_2015 <- share_proposed_from_2015 %>%
+  left_join(share_current_from_2015) %>%
+  relocate(district, current_total, proposed_total, current_agg_assault, proposed_agg_assault, current_homicide, proposed_homicide, current_shooting, proposed_shooting)
+
+share_from_2015
+
+write_csv(share_from_2015, "data/output/violent-crime-share-from-2015-2020.csv")
+```
+
+

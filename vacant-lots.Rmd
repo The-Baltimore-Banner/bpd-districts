@@ -1,0 +1,160 @@
+---
+title: "vacants"
+output: html_document
+date: "2022-09-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(janitor)
+library(lubridate)
+library(readxl)
+library(corrr)
+library(sf)
+library(sqldf)
+library(scales)
+options(digits=3)
+options(scipen=999)
+'%notin%' <- Negate('%in%')
+
+#does a standard group_by and count() with percentage
+grouper <- function(input_df, group_by_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(df_properties_count = n()) %>%
+    mutate(percent = df_properties_count/sum(df_properties_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := df_properties_count)
+  return(output_df)
+}
+
+#group/counts every column in input dataframe
+group_count <- function(input_df, group_column_name='n()', state_filter=NA, start_col = 1){
+  column_names <- colnames(input_df)
+  if(!is.na(state_filter)){
+    input_df <- input_df %>%
+      filter(state == state_filter)
+  }
+  for (column in column_names[start_col:length(column_names)]){
+    output <- grouper(input_df, column, group_column_name)
+    print(output)
+  }
+}
+
+grouper_sum <- function(input_df, group_by_column, sum_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(df_properties_count = sum(.data[[sum_column]])) %>%
+    mutate(percent = df_properties_count/sum(df_properties_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := df_properties_count)
+  return(output_df)
+  
+}
+
+#lowers case of every character column in a dataframe
+lower_df <- function(input_df){
+  names <- colnames(input_df)
+  output_df <- input_df
+  names <- colnames(output_df)
+  for (name in names){
+    if (is.character(output_df[[name]])){
+      output_df[[name]] <- tolower(output_df[[name]])
+      #print('yes')
+    } else {
+      output_df[[name]] <- output_df[[name]]
+      #print('no')
+    }
+  }
+  return(output_df)
+}
+
+```
+
+# IMPORT
+
+```{r}
+
+#import properties shape file
+properties <- st_read("/Users/ryanlittle/code/data-library/baltimore/baltimore-shapes/Real_Property_Information/Real_Property_Information.shp") %>%
+  clean_names() %>%
+  lower_df() %>%
+  #calc lot size
+  mutate(area = st_area(.))
+
+glimpse(properties)
+
+```
+# MUTATE, GROUP, COUNT
+
+```{r}
+
+#create df version for faster processing
+df_properties <- as.data.frame(properties) %>%
+  #calculate int lot size for filtering
+  mutate(int_area = as.integer(area))
+
+# filtering out large vacants that appear to not be vacant
+big_vacant_lots <- df_properties %>%
+  filter(vacind == "y") %>%
+  #filtering out large vacants by area
+  filter(int_area >= 97021)
+
+#removing big vacants lot
+df_properties <- df_properties %>%
+  filter(objectid %notin% big_vacant_lots$objectid)
+
+#changing eNAs to no
+df_properties$vacind[is.na(df_properties$vacind)] <- 'n'
+
+#grouping and summing by neighborhood
+grouped_df_properties <- df_properties %>%
+  group_by(neighbor, vacind) %>%
+  summarise(lots = n(),
+            lot_area = sum(area))
+
+grouped_df_properties <- grouped_df_properties %>%
+  #changing y/n to more descriptive
+  mutate(vacind = case_when(
+    vacind == "y" ~ "vacant",
+    TRUE ~ "not_vacant"
+  )) %>%
+  #pivoting wider
+  pivot_wider(values_from = c(lots, lot_area), names_from = vacind)
+
+#replacing NAs with 0
+grouped_df_properties$lots_vacant[is.na(grouped_df_properties$lots_vacant)] <- 0
+grouped_df_properties$lots_not_vacant[is.na(grouped_df_properties$lots_not_vacant)] <- 0
+
+#renaming columns for clarity, calculating percentages
+final_df_properties <- grouped_df_properties %>%
+  mutate(lots = lots_not_vacant + lots_vacant) %>%
+  rename(vacants = lots_vacant) %>%
+  mutate(vacant_lots_perc = (vacants/lots)*100) %>%
+  mutate(lot_area = lot_area_not_vacant + lot_area_vacant) %>%
+  rename(vacant_lot_area = lot_area_vacant) %>%
+  mutate(area_vacant_perc = (vacant_lot_area/lot_area)*100) %>%
+  select(neighbor, vacants, lots, vacant_lots_perc, lot_area, vacant_lot_area, area_vacant_perc) %>%
+  arrange(desc(area_vacant_perc))  %>%
+  mutate(lot_area = as.integer(lot_area),
+         vacant_lot_area = as.integer(vacant_lot_area),
+         area_vacant_perc = as.integer(area_vacant_perc)
+         )
+
+write_csv(final_df_properties, "data/output/vacant-lots-by-neighborhood.csv")
+
+```
+
+```{r}
+
+large_vacants <- big_vacant_lots %>%
+  select(neighbor, fulladdr, area)
+
+write_csv(large_vacants, "data/output/large-vacants.csv")
+
+large_vacants
+```
+

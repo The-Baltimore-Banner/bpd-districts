@@ -1,0 +1,144 @@
+---
+title: "corr"
+output: html_document
+date: "2022-09-12"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(janitor)
+library(lubridate)
+library(readxl)
+library(corrr)
+library(sqldf)
+library(scales)
+options(digits=3)
+options(scipen=999)
+'%notin%' <- Negate('%in%')
+
+#does a standard group_by and count() with percentage
+grouper <- function(input_df, group_by_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = n()) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+}
+
+#group/counts every column in input dataframe
+group_count <- function(input_df, group_column_name='n()', state_filter=NA, start_col = 1){
+  column_names <- colnames(input_df)
+  if(!is.na(state_filter)){
+    input_df <- input_df %>%
+      filter(state == state_filter)
+  }
+  for (column in column_names[start_col:length(column_names)]){
+    output <- grouper(input_df, column, group_column_name)
+    print(output)
+  }
+}
+
+grouper_sum <- function(input_df, group_by_column, sum_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = sum(.data[[sum_column]])) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+  
+}
+
+#lowers case of every character column in a dataframe
+lower_df <- function(input_df){
+  names <- colnames(input_df)
+  output_df <- input_df
+  names <- colnames(output_df)
+  for (name in names){
+    if (is.character(output_df[[name]])){
+      output_df[[name]] <- tolower(output_df[[name]])
+      #print('yes')
+    } else {
+      output_df[[name]] <- output_df[[name]]
+      #print('no')
+    }
+  }
+  return(output_df)
+}
+
+
+#cribbed from stackoverflow
+calc_p_value <- function(vec_a, vec_b, sig_level){
+  test_res <- cor.test(vec_a, vec_b)
+  sig <- if_else(test_res$p.value < sig_level, "*", "")
+  paste0(round(cor.test(vec_a, vec_b)$estimate, 2), sig)
+}
+
+```
+
+```{r}
+crosswalk <- read_csv("data/output/crosswalk/clean-bpd-district-neighborhood-crosswalk.csv")
+
+
+vacants <- read_csv("data/output/vacant-lots-by-neighborhood.csv") %>%
+  rename(neighborhood = neighbor) %>%
+  left_join(crosswalk)
+
+vacants_by_proposed_district <- vacants %>%
+  group_by(proposed_district) %>%
+  summarise(vacants = sum(vacants, na.rm = TRUE),
+            lots = sum(lots, na.rm = TRUE),
+            vacant_lot_area = sum(vacant_lot_area, na.rm = TRUE),
+            lot_area = sum(lot_area, na.rm = TRUE)
+            ) %>%
+  filter(proposed_district != "NA") %>%
+  rename(district = proposed_district) %>%
+  mutate(vacant_area_perc = (vacant_lot_area/lot_area)*100,
+         vacant_count_perc = (vacants/lots)*100) %>%
+  ungroup()
+
+
+current_pre <- read_csv("data/output/current-district-from-2015.csv")
+current_pandemic <- read_csv("data/output/current-district-pandemic.csv")
+
+
+proposed_pre <- read_csv("data/output/proposed-district-from-2015.csv") %>%
+  left_join(vacants_by_proposed_district)
+
+proposed_pandemic <- read_csv("data/output/proposed-district-pandemic.csv") %>%
+  left_join(vacants_by_proposed_district)
+
+
+```
+
+```{r}
+
+pre_corr <- proposed_pre %>%
+    select(-district, -year, -majority, -largest_pop)
+
+colpair_map(pre_corr, calc_p_value, 0.05) %>%
+  shave() %>%
+  filter(term %in% c("x2020_pop", "x2020_pop_hisp", "x2020_pop_white_non_hisp", "x2020_pop_black_non_hisp", "vacant_area_perc", "vacant_count_perc", "vacants", "lots", "vacant_lot_area", "lot_area")) %>%
+  select(term, agg_assault, homicide, shooting)
+
+
+```
+
+```{r}
+
+pre_corr <- proposed_pandemic %>%
+            select(-district, -year, -majority, -largest_pop)
+
+colpair_map(pre_corr, calc_p_value, 0.05) %>%
+  shave() %>%
+  filter(term %in% c("x2020_pop", "x2020_pop_hisp", "x2020_pop_white_non_hisp", "x2020_pop_black_non_hisp", "vacant_area_perc", "vacant_count_perc", "vacants", "lots", "vacant_lot_area", "lot_area")) %>%
+  select(term, agg_assault, homicide, shooting)
+
+
+```

@@ -1,0 +1,334 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(janitor)
+library(lubridate)
+library(tis)
+options(digits=3)
+options(scipen=999)
+'%notin%' <- Negate('%in%')
+
+#does a standard group_by and count() with percentage
+grouper <- function(input_df, group_by_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = n()) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+}
+
+#group/counts every column in input dataframe
+group_count <- function(input_df, group_column_name='n()', state_filter=NA, start_col = 1){
+  column_names <- colnames(input_df)
+  if(!is.na(state_filter)){
+    input_df <- input_df %>%
+      filter(state == state_filter)
+  }
+  for (column in column_names[start_col:length(column_names)]){
+    output <- grouper(input_df, column, group_column_name)
+    print(output)
+  }
+}
+
+#lowers case of every character column in a dataframe
+lower_df <- function(input_df){
+  names <- colnames(input_df)
+  output_df <- input_df
+  names <- colnames(output_df)
+  for (name in names){
+    if (is.character(output_df[[name]])){
+      output_df[[name]] <- tolower(output_df[[name]])
+      #print('yes')
+    } else {
+      output_df[[name]] <- output_df[[name]]
+      #print('no')
+    }
+  }
+  return(output_df)
+}
+
+grouper_sum <- function(input_df, group_by_column, sum_column, new_column_name = "n()"){
+  output_df <- input_df %>%
+    group_by(.data[[group_by_column]]) %>%
+    summarise(temp_count = sum(.data[[sum_column]])) %>%
+    mutate(percent = temp_count/sum(temp_count)*100) %>%
+    arrange(desc(percent)) %>%
+    rename(!!new_column_name := temp_count)
+  return(output_df)
+  
+}
+
+```
+
+
+
+```{r}
+#importing district/census tract intersections created in qgis
+intersection <- read_csv("data/output/crosswalk/current-district-intersection.csv")
+
+#creating distinct database of Baltimore City census tracts
+total_areas <- intersection %>%
+  distinct(GEOID20, trac_area)
+
+#importing difference between districts created in qgis
+difference <- read_csv("data/output/crosswalk/census-tracts-difference.csv") %>%
+  group_by(GEOID20) %>%
+  summarise(diff_area = sum(diff_area))
+
+#joining difference to total
+total_areas <- total_areas %>%
+  left_join(difference) 
+
+#replacing NAs with 0s
+total_areas$diff_area[is.na(total_areas$diff_area)] <- 0
+  
+#
+total_areas <- total_areas %>%
+  mutate(total_area = trac_area - diff_area)%>%
+  select(GEOID20, total_area) %>%
+  rename(trac_area = total_area,
+         geoid_11 = GEOID20) %>%
+  mutate(geoid_11 = as.character(geoid_11))
+
+bpd_district_crosswalk <- intersection %>%
+  select(dist_name, GEOID20, int_area, dist_area) %>%#, trac_area) %>%
+  rename(geoid_11 = GEOID20) %>%
+  mutate(geoid_11 = as.character(geoid_11)) %>%
+  left_join(total_areas) %>%
+  mutate(percent_share = int_area/trac_area) 
+
+```
+
+
+```{r}
+
+bpd_district_crosswalk %>%
+  group_by(geoid_11) %>%
+  summarise(share = sum(percent_share)) %>%
+  ungroup()
+
+```
+
+
+```{r}
+
+#import 2020 census data for each neighborhood
+census <- read_csv("../census-2020/data/05_tract_pl94171_standard_compare_2010_2020.csv") %>%
+  clean_names() %>%
+  filter(state_abbr == "MD") %>%
+  select(geoid_11, x2020_pop, x2020_pop_hisp, x2020_pop_white_non_hisp, x2020_pop_black_non_hisp) %>% 
+  lower_df()
+
+joined_to_census <- bpd_district_crosswalk %>%
+  left_join(census)
+  
+
+census_summed <- joined_to_census %>%
+  mutate(x2020_pop = x2020_pop * percent_share,
+         x2020_pop_hisp = x2020_pop_hisp * percent_share,
+         x2020_pop_white_non_hisp = x2020_pop_white_non_hisp * percent_share,
+         x2020_pop_black_non_hisp = x2020_pop_black_non_hisp * percent_share) %>%
+  group_by(dist_name) %>%
+  summarise(x2020_pop = sum(x2020_pop),
+            x2020_pop_hisp = sum(x2020_pop_hisp),
+            x2020_pop_white_non_hisp = sum(x2020_pop_white_non_hisp),
+            x2020_pop_black_non_hisp = sum(x2020_pop_black_non_hisp))
+
+```
+
+```{r}
+
+#building DF of Baltimore census tracts
+temp <- joined_to_census %>%
+  distinct(geoid_11, x2020_pop)
+
+sum(temp$x2020_pop)
+
+```
+
+```{r}
+
+sum(census_summed$x2020_pop)
+
+```
+############
+
+```{r}
+
+existing_districts <- census_summed %>%
+  mutate(majority = case_when(
+    x2020_pop_black_non_hisp/x2020_pop >= .5 ~ "black",
+    x2020_pop_white_non_hisp/x2020_pop >= .5 ~ "white",
+    x2020_pop_hisp/x2020_pop >= .5 ~ "hispanic",
+    TRUE  ~ "minority"
+  )) %>%
+  mutate(largest_pop = case_when(
+    x2020_pop_hisp > x2020_pop_white_non_hisp & x2020_pop_hisp > x2020_pop_black_non_hisp ~ "hispanic",
+    x2020_pop_white_non_hisp > x2020_pop_hisp & x2020_pop_white_non_hisp > x2020_pop_black_non_hisp ~ "white",
+    x2020_pop_black_non_hisp > x2020_pop_hisp & x2020_pop_black_non_hisp > x2020_pop_white_non_hisp ~ "black",
+    TRUE ~ "error"
+  )) %>%
+  mutate(white_pop_rank = dense_rank(-x2020_pop_white_non_hisp),
+         black_pop_rank = dense_rank(-x2020_pop_black_non_hisp),
+         hisp_pop_rank = dense_rank(-x2020_pop_hisp)) %>%
+  clean_names() %>%
+  rename(district = dist_name) %>%
+  lower_df()
+
+```
+
+
+```{r}
+
+#importing and cleaning four corners
+crimes <- read_csv('../city-crime-data/data/Part_1_Crime_Data_.csv') %>%
+  #cleaning column names
+  clean_names() %>%
+  #lowering text in df
+  lower_df() %>%
+  #converting to lubridate
+  mutate(crime_date_time = ymd_hms(crime_date_time))  %>%
+  #making year month hour columns
+  mutate(year = year(as.Date(crime_date_time)),
+         month = month(as.Date(crime_date_time)),
+         hour = hour(as.Date(crime_date_time)),
+         date = as_date(crime_date_time, 'day')) %>%
+  #removing lat/long because there are multiples and ethnicity because it is unreliable and uneccesary for weekend count analysis
+  select(-x, -y, -row_id, -latitude, -longitude, -ethnicity) %>%#, -shape) %>%
+  #filtering for year
+  filter(year >= 2011) %>%
+  #splitting geo location
+  separate(geo_location, c("latitude", "longitude"), ',') %>%
+  #removing parenthesis
+  mutate(latitude = gsub('\\(', '', latitude),
+         longitude = gsub('\\)', '', longitude)) %>%
+  filter(!is.na(district)) %>%
+  #mutating database of victims to database of distinct crimes
+  group_by(crime_date_time, crime_code, location, description, district, neighborhood, year, date) %>%
+  summarise(victims = n())
+
+```
+
+```{r}
+
+repair_district_name <- function(input_df){
+  
+  output_df <- input_df %>%
+    mutate(district = case_when(
+      district == "northeast" ~ "northeastern",
+      district == "northwest" ~ "northwestern",
+      district == "southwest" ~ "southwestern",
+      district == "southeast" ~ "southeastern",
+      TRUE ~ district
+    ))
+  
+  return(output_df)
+}
+
+
+
+sub_calc_district <- function(input_df, input_district){
+  
+  #input_df <- crimes
+  
+  #input_district <- district
+  
+  output_df <- input_df %>%
+    filter(district == input_district) %>%
+    group_by(description) %>%
+    summarise(incidents = n()) %>%
+    mutate(district = input_district) %>%
+    pivot_wider(values_from = incidents, names_from = description) %>%
+    clean_names() %>%
+    repair_district_name() %>%
+    left_join(existing_districts) %>%
+    mutate(agg_assault_per_1k = agg_assault/(x2020_pop/1000),
+           arson_per_1k  = arson/(x2020_pop/1000),
+           auto_theft_per_1k  = auto_theft/(x2020_pop/1000),
+           burglary_per_1k  = burglary/(x2020_pop/1000),
+           common_assault_per_1k  = common_assault/(x2020_pop/1000),
+           homicide_per_1k  = homicide/(x2020_pop/1000),
+           larceny_per_1k  = larceny/(x2020_pop/1000),
+           larceny_from_auto_per_1k  = larceny_from_auto/(x2020_pop/1000),
+           rape_per_1k  = rape/(x2020_pop/1000),
+           robbery_carjacking_per_1k  = robbery_carjacking/(x2020_pop/1000),
+           robbery_commercial_per_1k  = robbery_commercial/(x2020_pop/1000),
+           robbery_residence_per_1k  = robbery_residence/(x2020_pop/1000),
+           robbery_street_per_1k  = robbery_street/(x2020_pop/1000),
+           shooting_per_1k  = shooting/(x2020_pop/1000))
+    
+    return(output_df)
+}
+
+# Entrypoint with year filter
+
+calc_district <- function(input_df, input_district, input_year="None"){
+  if (input_year != "None"){
+    input_df <- input_df %>%
+      filter(year == input_year)}
+  output_df <- input_df %>%
+    sub_calc_district(input_district)
+}
+
+
+calc_districts <- function(input_df){
+  
+  #input_df <- crimes
+  
+  districts <- unique(crimes$district)
+
+  for (district_nume in 1:length(districts)){
+    
+    district <- districts[district_nume]
+    
+    temp <- calc_district(input_df, district)
+    
+    if (district_nume == 1) {
+      output <- temp
+    } else {
+      output <- output %>%
+        bind_rows(temp)
+    }
+    
+  }
+  
+ output <- output %>%
+    arrange(district)
+  
+  return(output)
+  
+}
+
+
+
+current_pandemic <- calc_districts(crimes %>%
+                             filter(year >= 2020)) %>%
+  mutate(year = "since 2020")  
+
+current_from_2015 <- calc_districts(crimes %>%
+                              filter(year < 2020 & year >= 2015)) %>%
+  mutate(year = "from 2015 to 2020")
+
+current_district <- current_pandemic %>%
+  bind_rows(current_from_2015)
+
+```
+
+```{r}
+
+write_csv(current_from_2015, "data/output/current-district-from-2015.csv")
+write_csv(current_pandemic, "data/output/current-district-pandemic.csv")
+write_csv(current_district, "data/output/current-pandemic-district-profiles.csv")
+
+```
+
