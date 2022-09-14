@@ -47,7 +47,7 @@ northeastern | 13.79 | 10.47 | 14.93 | 10.69 | 10.37 | 6.60 | 10.03 | 7.06
 
 #### 911 calls by districts
 district | current_2020_to_current_raw | current pandemic share | proposed_2020_to_current_raw | proposed pandemic share | current_2015_to_2020_raw | current 2015 to 2020 share | proposed_2015_to_2020_raw | proposed 2015 to 2020 share
---- | --- | --- | --- | ---
+--- | --- | --- | --- | --- | --- | --- | --- | ---
 central | 297419 | 9.58 | 365429 | 11.77 | 262037 | 10.84 | 300309 | 12.42
 eastern | 341762.00 | 11.01 | 325825.00 | 10.49 | 256870.00 | 10.63 | 261670.00 | 10.82
 northeastern | 331983 | 10.69 | 242664 | 7.81 | 308085 | 12.74 | 215057 | 8.90
