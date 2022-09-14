@@ -19,7 +19,7 @@ The Baltimore Police Department's goal was to equally share workload among the c
 <a id="data"></a>
 ## Data
 
-#### Pre-pandemic crime trends in current and proposed districts
+### Pre-pandemic crime trends in current and proposed districts
 district | current total | proposed total | current agg assault | proposed agg assault | current homicide | proposed homicide | current shooting | proposed shooting
 --- | --- | --- | --- | --- | --- | --- | --- | ---
 western | 7.95 | 10.68 | 11.40 | 13.83 | 16.82 | 17.63 | 16.93 | 18.25
@@ -32,7 +32,7 @@ southern | 11.23 | 11.02 | 12.08 | 11.22 | 9.66 | 7.79 | 11.30 | 9.56
 northeastern | 14.80 | 11.45 | 13.46 | 9.45 | 12.34 | 7.73 | 11.40 | 7.55
 central | 11.62 | 13.19 | 10.43 | 12.39 | 5.92 | 6.48 | 7.13 | 7.68
 
-#### Pandemic crime trends in current and proposed districts
+### Pandemic crime trends in current and proposed districts
 district | current total | proposed total | current agg assault | proposed agg assault | current homicide | proposed homicide | current shooting | proposed shooting
 --- | --- | --- | --- | --- | --- | --- | --- | ---
 southwestern | 11.23 | 10.25 | 12.51 | 11.77 | 15.55 | 19.08 | 13.91 | 15.47
@@ -45,7 +45,7 @@ northern | 10.38 | 10.33 | 8.76 | 9.27 | 5.18 | 7.66 | 6.27 | 8.35
 central | 11.88 | 13.01 | 11.56 | 12.24 | 5.89 | 7.30 | 9.83 | 9.39
 northeastern | 13.79 | 10.47 | 14.93 | 10.69 | 10.37 | 6.60 | 10.03 | 7.06
 
-#### 911 calls by districts
+### 911 calls by districts
 district | current_2020_to_current_raw | current pandemic share | proposed_2020_to_current_raw | proposed pandemic share | current_2015_to_2020_raw | current 2015 to 2020 share | proposed_2015_to_2020_raw | proposed 2015 to 2020 share
 --- | --- | --- | --- | --- | --- | --- | --- | ---
 central | 297419 | 9.58 | 365429 | 11.77 | 262037 | 10.84 | 300309 | 12.42
@@ -62,7 +62,7 @@ western | 352991 | 11.37 | 396045 | 12.75 | 285900 | 11.83 | 346869 | 14.35
 
 ## Methodology
 
-#### How we analyzed changing BPD districts
+### How we analyzed changing BPD districts
 
 Baltimore Police have [redrawn the districts](https://www.baltimorepolice.org/redistricting) using 2020 Decennial Census, workload service data, Part 1 crimes and property crimes data from 2016 to 2021. It defined workload as the number officers who responded to each call times the number of calls.
 
