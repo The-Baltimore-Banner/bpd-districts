@@ -13,7 +13,7 @@ The Baltimore Police Department's goal was to equally share workload among the c
 - The Western, Eastern and Southwestern neighborhoods will comprise almost half of all city homicides and shootings and the share of the Western and Southwestern neighborhoods will increase.
 - If crime trends return to pre-pandemic levels, the Western District will have the highest share of shootings, homicides, aggravated assaults and 911 calls. Redistricting would have increased all four.
 - New land and the residents who live there added to the historically violent Eastern and Western districts will lower the per capita rates of homicides and shootings despite more of each occurring in those districts.
-- The proposed Northeastern District would have the lowest share of all shootings and homicides if pandemic trends continue with just 7% of each , a drastic drop from 10% and 9%, respectively. Only two other districts would see drops in both categories; their shares are much higher and remained within a percentage point of current levels.
+- The proposed Northeastern District would have the lowest share of all shootings and homicides if pandemic trends continue with just 7% of each , a drastic drop from 10% each. Only two other districts would see drops in both categories; their shares are much higher and remained within a percentage point of current levels.
 - If pandemic trends are more indicative of the future, the proposed Southwestern district would have by far the most homicides. Nearly one of every five homicides have taken place within the proposed district boundaries since the beginning of 2020.
 
 <a id="data"></a>
